@@ -26,15 +26,17 @@ class Mario:
         self.save_every = 5e5   # no. of experiences between saving Mario Net
         self.save_dir = save_dir
 
-        self.use_cuda = torch.cuda.is_available()
+        # self.use_cuda = torch.cuda.is_available()
+
+        self.use_cuda = torch.backends.mps.is_available()
 
         # Mario's DNN to predict the most optimal action - we implement this in the Learn section
         self.net = MarioNet(self.state_dim, self.action_dim).float()
-        if self.use_cuda:
-            self.net = self.net.to(device='cuda')
+
         if checkpoint:
             self.load(checkpoint)
-
+        if self.use_cuda:
+            self.net = self.net.to(device='mps')
         self.optimizer = torch.optim.Adam(self.net.parameters(), lr=0.00025)
         self.loss_fn = torch.nn.SmoothL1Loss()
 
@@ -54,7 +56,7 @@ class Mario:
 
         # EXPLOIT
         else:
-            state = torch.FloatTensor(state).cuda() if self.use_cuda else torch.FloatTensor(state)
+            state = torch.FloatTensor(state).to("mps") if self.use_cuda else torch.FloatTensor(state)
             state = state.unsqueeze(0)
             action_values = self.net(state, model='online')
             action_idx = torch.argmax(action_values, axis=1).item()
@@ -78,11 +80,11 @@ class Mario:
         reward (float),
         done(bool))
         """
-        state = torch.FloatTensor(state).cuda() if self.use_cuda else torch.FloatTensor(state)
-        next_state = torch.FloatTensor(next_state).cuda() if self.use_cuda else torch.FloatTensor(next_state)
-        action = torch.LongTensor([action]).cuda() if self.use_cuda else torch.LongTensor([action])
-        reward = torch.DoubleTensor([reward]).cuda() if self.use_cuda else torch.DoubleTensor([reward])
-        done = torch.BoolTensor([done]).cuda() if self.use_cuda else torch.BoolTensor([done])
+        state = torch.FloatTensor(state).to("mps") if self.use_cuda else torch.FloatTensor(state)
+        next_state = torch.FloatTensor(next_state).to("mps") if self.use_cuda else torch.FloatTensor(next_state)
+        action = torch.LongTensor([action]).to("mps")  if self.use_cuda else torch.LongTensor([action])
+        reward = torch.FloatTensor([reward]).to("mps")  if self.use_cuda else torch.DoubleTensor([reward])
+        done = torch.BoolTensor([done]).to("mps") if self.use_cuda else torch.BoolTensor([done])
 
         self.memory.append( (state, next_state, action, reward, done,) )
 
@@ -165,10 +167,11 @@ class Mario:
         if not load_path.exists():
             raise ValueError(f"{load_path} does not exist")
 
-        ckp = torch.load(load_path, map_location=('cuda' if self.use_cuda else 'cpu'))
+        ckp = torch.load(load_path, map_location=('mps' if self.use_cuda else 'cpu'))
         exploration_rate = ckp.get('exploration_rate')
         state_dict = ckp.get('model')
 
         print(f"Loading model at {load_path} with exploration rate {exploration_rate}")
         self.net.load_state_dict(state_dict)
         self.exploration_rate = exploration_rate
+    
